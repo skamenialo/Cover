@@ -15,15 +15,18 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.support.annotation.Nullable;
+import android.telephony.PhoneStateListener;
+import android.telephony.TelephonyManager;
 import android.util.Log;
 
 import com.skamenialo.cover.Helpers.BroadcastReceivedListener;
+import com.skamenialo.cover.Helpers.CallStateListener;
 import com.skamenialo.cover.Helpers.PermissionCheckedListener;
 import com.skamenialo.cover.Helpers.Utils;
 
 public class CoverService
         extends android.app.Service
-        implements SensorEventListener, BroadcastReceivedListener {
+        implements SensorEventListener, BroadcastReceivedListener, CallStateListener{
 
     //region Fields
 
@@ -58,6 +61,9 @@ public class CoverService
     CoverBroadcastReceiver mCoverBroadcastReceiver;
     IntentFilter mFilter;
     boolean mScreenLocked;
+
+    TelephonyManager mTelephonyManager;
+    CoverPhoneStateListener mPhoneStateListener;
 
     //endregion
 
@@ -129,7 +135,6 @@ public class CoverService
 
             mFilter = new IntentFilter(Intent.ACTION_SCREEN_ON);
             mFilter.addAction(Intent.ACTION_SCREEN_OFF);
-            mFilter.addAction(Intent.ACTION_CALL);
             mFilter.addAction(Utils.WAKE_LOCK);
             mCoverBroadcastReceiver = new CoverBroadcastReceiver();
             mCoverBroadcastReceiver.SetBroadcastReceivedListener(this);
@@ -138,6 +143,10 @@ public class CoverService
             mPolicyManager = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
             mPowerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
             mWakeLock = mPowerManager.newWakeLock(PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.FULL_WAKE_LOCK, Utils.WAKE_LOCK);
+
+            mTelephonyManager = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+            mPhoneStateListener = new CoverPhoneStateListener();
+            mPhoneStateListener.setCallStateListener(this);
         } catch (Exception e) {
             Log.e(TAG, e.toString());
         }
@@ -145,7 +154,7 @@ public class CoverService
         Log.i(TAG, "Initialized");
     }
 
-    private void register() {
+    private void register(boolean all) {
         if (mRegistered)
             return;
         try {
@@ -154,16 +163,18 @@ public class CoverService
         } catch (Exception e) {
             Log.e(TAG, e.toString());
         }
-        try {
-            mSensorManager.registerListener(this, mSensor, SensorManager.SENSOR_DELAY_NORMAL);
-            Log.i(TAG, "Sensor listener registered");
-        } catch (Exception e) {
+        try{
+            mTelephonyManager.listen(mPhoneStateListener, PhoneStateListener.LISTEN_CALL_STATE);
+            Log.i(TAG, "CoverPhoneStateListener registered");
+        }catch(Exception e){
             Log.e(TAG, e.toString());
         }
+        if(all)
+            registerSensor();
         mRegistered = true;
     }
 
-    private void unregister() {
+    private void unregister(boolean all) {
         if (!mRegistered)
             return;
         try {
@@ -172,13 +183,33 @@ public class CoverService
         } catch (Exception e) {
             Log.e(TAG, e.toString());
         }
+        try{
+            mTelephonyManager.listen(mPhoneStateListener, PhoneStateListener.LISTEN_NONE);
+            Log.i(TAG, "CoverPhoneStateListener unregistered");
+        }catch(Exception e){
+            Log.e(TAG, e.toString());
+        }
+        if(all)
+            unregisterSensor();
+        mRegistered = false;
+    }
+
+    private void registerSensor(){
+        try {
+            mSensorManager.registerListener(this, mSensor, SensorManager.SENSOR_DELAY_NORMAL);
+            Log.i(TAG, "Sensor listener registered");
+        } catch (Exception e) {
+            Log.e(TAG, e.toString());
+        }
+    }
+
+    private void unregisterSensor(){
         try {
             mSensorManager.unregisterListener(this, mSensor);
             Log.i(TAG, "Sensor listener unregistered");
         } catch (Exception e) {
             Log.e(TAG, e.toString());
         }
-        mRegistered = false;
     }
 
     private boolean checkPermission() {
@@ -291,14 +322,14 @@ public class CoverService
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (checkPermission())
-            register();
+            register(true);
         Log.i(TAG, "Service started command");
         return START_STICKY_COMPATIBILITY;
     }
 
     @Override
     public void onDestroy() {
-        unregister();
+        unregister(true);
         mInitialized = false;
         mInstance = null;
         Log.i(TAG, "Service destroyed");
@@ -369,14 +400,19 @@ public class CoverService
                 if(mWakeLock.isHeld())
                     mWakeLock.release();
                 break;
-            case Intent.ACTION_CALL:
-                Log.i(TAG, "ACTION_CALL");
-                //TODO
-                break;
             case Utils.WAKE_LOCK:
                 Log.i(TAG, "WAKE_LOCK");
                 unlockScreen();
                  break;
+        }
+    }
+
+    @Override
+    public void onCallStateChanged(int state) {
+        if(state == TelephonyManager.CALL_STATE_IDLE){
+            registerSensor();
+        }else{
+            unregisterSensor();
         }
     }
 
@@ -397,6 +433,7 @@ public class CoverService
     public static void setOnPermissionChecked(PermissionCheckedListener listener) {
         mListener = listener;
     }
+
     //endregion
 
     //region Helpers
