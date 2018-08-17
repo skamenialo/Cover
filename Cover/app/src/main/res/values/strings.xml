@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">Cover</string>
+
+    <string name="request_permission_title">This app requires permissions</string>
+  <string name="request_permission_message">Without the device administrator permission, locking and unlocking the screen will be impossible.
+  </string>
+
+  <string name="request_permission_explanation">
+    Uninstall this app is only possible after disabling the device administrator permission.
+  </string>
+
+    <string name="on_permission_disabled">The application can now be uninstalled.</string>
+</resources>
