@@ -1,10 +1,14 @@
 package com.skamenialo.cover;
 
+import android.app.Notification;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.admin.DevicePolicyManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.Color;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -15,6 +19,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.support.annotation.Nullable;
+import android.support.v7.app.NotificationCompat;
 import android.telephony.PhoneStateListener;
 import android.telephony.TelephonyManager;
 import android.util.Log;
@@ -64,6 +69,9 @@ public class CoverService
 
     TelephonyManager mTelephonyManager;
     CoverPhoneStateListener mPhoneStateListener;
+
+    NotificationManager mNotificationManager;
+    int mNotificationID = "com.skamenialo.cover.notification".hashCode();
 
     //endregion
 
@@ -147,6 +155,8 @@ public class CoverService
             mTelephonyManager = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
             mPhoneStateListener = new CoverPhoneStateListener();
             mPhoneStateListener.setCallStateListener(this);
+
+            mNotificationManager = ((NotificationManager)getSystemService(NOTIFICATION_SERVICE));
         } catch (Exception e) {
             Log.e(TAG, e.toString());
         }
@@ -307,6 +317,28 @@ public class CoverService
         }
     }
 
+    private void startNotification(){
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+        Notification notification = new NotificationCompat.Builder(this)
+                .setContentTitle(getString(R.string.notification_title))
+                .setContentText(getString(R.string.notification_message))
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setColor(Color.parseColor("#0099cc"))
+                .setAutoCancel(false)
+                .setContentIntent(pendingIntent)
+                .setOngoing(true)
+                .build();
+        startForeground(mNotificationID, notification);
+        Log.i(TAG, "Notification started");
+    }
+
+    private void stopNotification(){
+        mNotificationManager.cancel(mNotificationID);
+        Log.i(TAG, "Notification stopped");
+    }
+
     //endregion
 
     //region Service methods
@@ -321,8 +353,10 @@ public class CoverService
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (checkPermission())
+        if (checkPermission()) {
             register(true);
+            startNotification();
+        }
         Log.i(TAG, "Service started command");
         return START_STICKY_COMPATIBILITY;
     }
@@ -330,6 +364,7 @@ public class CoverService
     @Override
     public void onDestroy() {
         unregister(true);
+        stopNotification();
         mInitialized = false;
         mInstance = null;
         Log.i(TAG, "Service destroyed");
