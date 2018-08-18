@@ -428,17 +428,19 @@ public class CoverService
             case Intent.ACTION_SCREEN_ON:
                 Log.i(TAG, "SCREEN_ON");
                 mScreenLocked = false;
+                stopUnlockTimer();
                 break;
             case Intent.ACTION_SCREEN_OFF:
                 Log.i(TAG, "SCREEN_OFF");
                 mScreenLocked = true;
+                stopLockTimer();
                 if(mWakeLock.isHeld())
                     mWakeLock.release();
                 break;
             case Utils.WAKE_LOCK:
                 Log.i(TAG, "WAKE_LOCK");
                 unlockScreen();
-                 break;
+                break;
         }
     }
 
