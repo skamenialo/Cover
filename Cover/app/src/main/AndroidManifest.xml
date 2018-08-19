@@ -24,6 +24,11 @@
                 <action android:name="android.app.action.DEVICE_ADMIN_DISABLED"/>
             </intent-filter>
         </receiver>
+        <receiver android:name="com.skamenialo.cover.BootUpBroadcastReceiver" android:enabled="true" android:directBootAware="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>
