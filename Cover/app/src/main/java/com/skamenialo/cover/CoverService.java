@@ -67,11 +67,7 @@ public class CoverService
     IntentFilter mFilter;
     boolean mScreenLocked;
 
-    TelephonyManager mTelephonyManager;
     CoverPhoneStateListener mPhoneStateListener;
-
-    NotificationManager mNotificationManager;
-    int mNotificationID = "com.skamenialo.cover.notification".hashCode();
 
     //endregion
 
@@ -98,6 +94,9 @@ public class CoverService
                 if (!mScreenLocked && mLastSensorProximity < 1) {
                     Log.i(TAG_LOCK_TIMER, "Lock screen");
                     lockScreen();
+                }else{
+                    Log.i(TAG_LOCK_TIMER, "Cancel timer 3");
+                    stopLockTimer();
                 }
             }
         };
@@ -122,6 +121,9 @@ public class CoverService
                     Intent broadcast = new Intent();
                     broadcast.setAction(Utils.WAKE_LOCK);
                     sendBroadcast(broadcast);
+                }else{
+                    Log.i(TAG_UNLOCK_TIMER, "Cancel timer 3");
+                    stopUnlockTimer();
                 }
             }
         };
@@ -152,11 +154,8 @@ public class CoverService
             mPowerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
             mWakeLock = mPowerManager.newWakeLock(PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.FULL_WAKE_LOCK, Utils.WAKE_LOCK);
 
-            mTelephonyManager = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
             mPhoneStateListener = new CoverPhoneStateListener();
             mPhoneStateListener.setCallStateListener(this);
-
-            mNotificationManager = ((NotificationManager)getSystemService(NOTIFICATION_SERVICE));
         } catch (Exception e) {
             Log.e(TAG, e.toString());
         }
@@ -174,7 +173,8 @@ public class CoverService
             Log.e(TAG, e.toString());
         }
         try{
-            mTelephonyManager.listen(mPhoneStateListener, PhoneStateListener.LISTEN_CALL_STATE);
+            TelephonyManager telephonyManager = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+            telephonyManager.listen(mPhoneStateListener, PhoneStateListener.LISTEN_CALL_STATE);
             Log.i(TAG, "CoverPhoneStateListener registered");
         }catch(Exception e){
             Log.e(TAG, e.toString());
@@ -194,7 +194,8 @@ public class CoverService
             Log.e(TAG, e.toString());
         }
         try{
-            mTelephonyManager.listen(mPhoneStateListener, PhoneStateListener.LISTEN_NONE);
+            TelephonyManager telephonyManager = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+            telephonyManager.listen(mPhoneStateListener, PhoneStateListener.LISTEN_NONE);
             Log.i(TAG, "CoverPhoneStateListener unregistered");
         }catch(Exception e){
             Log.e(TAG, e.toString());
@@ -330,12 +331,13 @@ public class CoverService
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
                 .build();
-        startForeground(mNotificationID, notification);
+        startForeground(Utils.NOTIFICATION_ID, notification);
         Log.i(TAG, "Notification started");
     }
 
     private void stopNotification(){
-        mNotificationManager.cancel(mNotificationID);
+        NotificationManager notificationManager = ((NotificationManager)getSystemService(NOTIFICATION_SERVICE));
+        notificationManager.cancel(Utils.NOTIFICATION_ID);
         Log.i(TAG, "Notification stopped");
     }
 
@@ -389,9 +391,13 @@ public class CoverService
                     return;
                 }*/
                 float currentProximity = sensorEvent.values[0];
+                if(currentProximity == mLastSensorProximity)
+                    return;
+
                 float proximityDelta = Math.abs(mLastSensorProximity - currentProximity);
                 Log.i(TAG, String.format("last=%f, current=%f, delta=%f", mLastSensorProximity, currentProximity, proximityDelta));
                 if (mScreenLocked) {
+                    stopLockTimer();
                     if (currentProximity >= 1) {
                         Log.i(TAG, "start unlock timer");
                         startUnlockTimer();
@@ -401,6 +407,7 @@ public class CoverService
                         stopUnlockTimer();
                     }
                 } else {
+                    stopUnlockTimer();
                     if (currentProximity < 1) {
                         Log.i(TAG, "start lock timer");
                         startLockTimer();

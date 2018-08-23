@@ -5,5 +5,6 @@ public class Utils {
     public static final int MAX_RETRY_COUNT = 4;
     public static final int RETRY_DELAY = 100;
     public static final String WAKE_LOCK = "com.skamenialo.cover.wake_lock";
+    public static final int NOTIFICATION_ID = "com.skamenialo.cover.notification".hashCode();
 
 }
