@@ -58,6 +58,8 @@ public class CoverService
             mLockTimerStarted = false,
             mUnlockTimerStarted = false;
 
+    Object mSync;
+
     SensorManager mSensorManager;
     Sensor mSensor;
     long mLastUpdateSensorProximity;
@@ -75,55 +77,64 @@ public class CoverService
 
     public CoverService() {
         mBinder = new CoverBinder();
+        mSync = new Object();
         mLockTimer = new CountDownTimer(7000, 1000) {
             @Override
             public void onTick(long l) {
-                if (mScreenLocked) {
-                    Log.i(TAG_LOCK_TIMER, "Cancel timer 1");
-                    stopLockTimer();
-                } else {
-                    if (mLastSensorProximity >= 1) {
-                        Log.i(TAG_LOCK_TIMER, "Cancel timer 2");
+                synchronized (mSync) {
+                    if (mScreenLocked) {
+                        Log.i(TAG_LOCK_TIMER, "Cancel timer 1");
                         stopLockTimer();
+                    } else {
+                        if (mLastSensorProximity >= 1) {
+                            Log.i(TAG_LOCK_TIMER, "Cancel timer 2");
+                            stopLockTimer();
+                        }
                     }
                 }
             }
 
             @Override
             public void onFinish() {
-                if (!mScreenLocked && mLastSensorProximity < 1) {
-                    Log.i(TAG_LOCK_TIMER, "Lock screen");
-                    lockScreen();
-                }else{
-                    Log.i(TAG_LOCK_TIMER, "Cancel timer 3");
-                    stopLockTimer();
+                synchronized (mSync) {
+                    if (!mScreenLocked && mLastSensorProximity < 1) {
+                        Log.i(TAG_LOCK_TIMER, "Lock screen");
+                        lockScreen();
+                    } else {
+                        Log.i(TAG_LOCK_TIMER, "Cancel timer 3");
+                        stopLockTimer();
+                    }
                 }
             }
         };
         mUnlockTimer = new CountDownTimer(1, 1) {
             @Override
             public void onTick(long l) {
-                if (mScreenLocked) {
-                    if (mLastSensorProximity < 1) {
-                        Log.i(TAG_UNLOCK_TIMER, "Cancel timer 1");
+                synchronized (mSync) {
+                    if (mScreenLocked) {
+                        if (mLastSensorProximity < 1) {
+                            Log.i(TAG_UNLOCK_TIMER, "Cancel timer 1");
+                            stopUnlockTimer();
+                        }
+                    } else {
+                        Log.i(TAG_UNLOCK_TIMER, "Cancel timer 2");
                         stopUnlockTimer();
                     }
-                } else {
-                    Log.i(TAG_UNLOCK_TIMER, "Cancel timer 2");
-                    stopUnlockTimer();
                 }
             }
 
             @Override
             public void onFinish() {
-                if (mScreenLocked && mLastSensorProximity >= 1) {
-                    Log.i(TAG_UNLOCK_TIMER, "Unlock screen");
-                    Intent broadcast = new Intent();
-                    broadcast.setAction(Utils.WAKE_LOCK);
-                    sendBroadcast(broadcast);
-                }else{
-                    Log.i(TAG_UNLOCK_TIMER, "Cancel timer 3");
-                    stopUnlockTimer();
+                synchronized (mSync) {
+                    if (mScreenLocked && mLastSensorProximity >= 1) {
+                        Log.i(TAG_UNLOCK_TIMER, "Unlock screen");
+                        Intent broadcast = new Intent();
+                        broadcast.setAction(Utils.WAKE_LOCK);
+                        sendBroadcast(broadcast);
+                    } else {
+                        Log.i(TAG_UNLOCK_TIMER, "Cancel timer 3");
+                        stopUnlockTimer();
+                    }
                 }
             }
         };
@@ -396,28 +407,29 @@ public class CoverService
 
                 float proximityDelta = Math.abs(mLastSensorProximity - currentProximity);
                 Log.i(TAG, String.format("last=%f, current=%f, delta=%f", mLastSensorProximity, currentProximity, proximityDelta));
-                if (mScreenLocked) {
-                    stopLockTimer();
-                    if (currentProximity >= 1) {
-                        Log.i(TAG, "start unlock timer");
-                        startUnlockTimer();
-                    }
-                    else {
-                        Log.i(TAG, "stop unlock timer");
-                        stopUnlockTimer();
-                    }
-                } else {
-                    stopUnlockTimer();
-                    if (currentProximity < 1) {
-                        Log.i(TAG, "start lock timer");
-                        startLockTimer();
-                    } else {
-                        Log.i(TAG, "stop lock timer");
+                synchronized (mSync) {
+                    if (mScreenLocked) {
                         stopLockTimer();
+                        if (currentProximity >= 1) {
+                            Log.i(TAG, "start unlock timer");
+                            startUnlockTimer();
+                        } else {
+                            Log.i(TAG, "stop unlock timer");
+                            stopUnlockTimer();
+                        }
+                    } else {
+                        stopUnlockTimer();
+                        if (currentProximity < 1) {
+                            Log.i(TAG, "start lock timer");
+                            startLockTimer();
+                        } else {
+                            Log.i(TAG, "stop lock timer");
+                            stopLockTimer();
+                        }
                     }
+                    mLastUpdateSensorProximity = System.currentTimeMillis();
+                    mLastSensorProximity = currentProximity;
                 }
-                mLastUpdateSensorProximity = System.currentTimeMillis();
-                mLastSensorProximity = currentProximity;
             }
         } catch (Exception e) {
             Log.e(TAG, e.toString());
@@ -431,23 +443,25 @@ public class CoverService
 
     @Override
     public void onBroadcastReceived(String action, Intent intent) {
-        switch (action) {
-            case Intent.ACTION_SCREEN_ON:
-                Log.i(TAG, "SCREEN_ON");
-                mScreenLocked = false;
-                stopUnlockTimer();
-                break;
-            case Intent.ACTION_SCREEN_OFF:
-                Log.i(TAG, "SCREEN_OFF");
-                mScreenLocked = true;
-                stopLockTimer();
-                if(mWakeLock.isHeld())
-                    mWakeLock.release();
-                break;
-            case Utils.WAKE_LOCK:
-                Log.i(TAG, "WAKE_LOCK");
-                unlockScreen();
-                break;
+        synchronized (mSync) {
+            switch (action) {
+                case Intent.ACTION_SCREEN_ON:
+                    Log.i(TAG, "SCREEN_ON");
+                    mScreenLocked = false;
+                    stopUnlockTimer();
+                    break;
+                case Intent.ACTION_SCREEN_OFF:
+                    Log.i(TAG, "SCREEN_OFF");
+                    mScreenLocked = true;
+                    stopLockTimer();
+                    if (mWakeLock.isHeld())
+                        mWakeLock.release();
+                    break;
+                case Utils.WAKE_LOCK:
+                    Log.i(TAG, "WAKE_LOCK");
+                    unlockScreen();
+                    break;
+            }
         }
     }
 
