@@ -4,7 +4,10 @@
     <string name="request_permission_message">Without the device administrator permission, locking and unlocking the screen will be impossible.</string>
     <string name="request_permission_explanation">Uninstall this app is only possible after disabling the device administrator permission.</string>
     <string name="on_permission_disabled">The application can now be uninstalled.</string>
-    <string name="notification_title">Cover is active</string>
+    <string name="notification_title_active">Cover is active</string>
+    <string name="notification_title_inactive">Cover is inactive</string>
+    <string name="notification_action_enable">Enable</string>
+    <string name="notification_action_disable">Disable</string>
     <string name="notification_message">Press to open application</string>
 
 </resources>

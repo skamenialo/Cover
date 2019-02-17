@@ -71,6 +71,8 @@ public class CoverService
 
     CoverPhoneStateListener mPhoneStateListener;
 
+    android.support.v4.app.NotificationCompat.Builder mNotificationBuilder;
+
     //endregion
 
     //region Constructor
@@ -157,6 +159,8 @@ public class CoverService
             mFilter = new IntentFilter(Intent.ACTION_SCREEN_ON);
             mFilter.addAction(Intent.ACTION_SCREEN_OFF);
             mFilter.addAction(Utils.WAKE_LOCK);
+            mFilter.addAction(Utils.DISABLE);
+            mFilter.addAction(Utils.ENABLE);
             mCoverBroadcastReceiver = new CoverBroadcastReceiver();
             mCoverBroadcastReceiver.SetBroadcastReceivedListener(this);
             mScreenLocked = false;
@@ -167,6 +171,8 @@ public class CoverService
 
             mPhoneStateListener = new CoverPhoneStateListener();
             mPhoneStateListener.setCallStateListener(this);
+
+            mNotificationBuilder = generateNotificationBuilder();
         } catch (Exception e) {
             Log.e(TAG, e.toString());
         }
@@ -329,20 +335,43 @@ public class CoverService
         }
     }
 
-    private void startNotification(){
+    private android.support.v4.app.NotificationCompat.Builder generateNotificationBuilder() {
         Intent intent = new Intent(this, MainActivity.class);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
-        Notification notification = new NotificationCompat.Builder(this)
-                .setContentTitle(getString(R.string.notification_title))
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        PendingIntent contentIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+
+        return new NotificationCompat.Builder(this)
                 .setContentText(getString(R.string.notification_message))
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setColor(Color.parseColor("#0099cc"))
                 .setAutoCancel(false)
-                .setContentIntent(pendingIntent)
+                .setContentIntent(contentIntent)
                 .setOngoing(true)
-                .build();
-        startForeground(Utils.NOTIFICATION_ID, notification);
+                .setShowWhen(false)
+                .setOnlyAlertOnce(true)
+                .setPriority(NotificationCompat.PRIORITY_HIGH);
+    }
+
+    private void setNotificationAction(boolean disable) {
+        Intent intent = new Intent();
+        String actionText = null;
+        if(disable) {
+            actionText = getString(R.string.notification_action_disable);
+            intent.setAction(Utils.DISABLE);
+            mNotificationBuilder.setContentTitle(getString(R.string.notification_title_active));
+        }else{
+            actionText = getString(R.string.notification_action_enable);
+            intent.setAction(Utils.ENABLE);
+            mNotificationBuilder.setContentTitle(getString(R.string.notification_title_inactive));
+        }
+        PendingIntent actionIntent = PendingIntent.getBroadcast(this, (int)System.currentTimeMillis(), intent, 0);
+        mNotificationBuilder.mActions.clear();
+        mNotificationBuilder.addAction(0, actionText, actionIntent);
+    }
+
+    private void startNotification(){
+        setNotificationAction(true);
+        startForeground(Utils.NOTIFICATION_ID, mNotificationBuilder.build());
         Log.i(TAG, "Notification started");
     }
 
@@ -460,6 +489,16 @@ public class CoverService
                 case Utils.WAKE_LOCK:
                     Log.i(TAG, "WAKE_LOCK");
                     unlockScreen();
+                    break;
+                case Utils.DISABLE:
+                    unregisterSensor();
+                    setNotificationAction(false);
+                    ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).notify(Utils.NOTIFICATION_ID, mNotificationBuilder.build());
+                    break;
+                case Utils.ENABLE:
+                    registerSensor();
+                    setNotificationAction(true);
+                    ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).notify(Utils.NOTIFICATION_ID, mNotificationBuilder.build());
                     break;
             }
         }
